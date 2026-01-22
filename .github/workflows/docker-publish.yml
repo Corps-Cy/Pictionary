@@ -77,7 +77,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta-client.outputs.tags }}
           labels: ${{ steps.meta-client.outputs.labels }}
-          build-args: |
-            VITE_SOCKET_URL=/socket
+          # Don't set VITE_SOCKET_URL - let client auto-detect from window.location.origin
+          # This ensures WebSocket connects to the same domain via /socket.io/ path
           cache-from: type=gha
           cache-to: type=gha,mode=max

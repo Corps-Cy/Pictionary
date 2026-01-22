@@ -215,6 +215,7 @@ function App() {
   const [username, setUsername] = useState("");
   const [room, setRoom] = useState("");
   const [category, setCategory] = useState("mix");
+  const [gameMode, setGameMode] = useState("classic");
   const [players, setPlayers] = useState([]);
   
   // Game State
@@ -226,6 +227,10 @@ function App() {
   const [maxTime, setMaxTime] = useState(60);
   const [turnInfo, setTurnInfo] = useState({ current: 0, total: 0 });
   const [leaderboard, setLeaderboard] = useState(null);
+  
+  // 新增：游戏模式相关状态
+  const [comboMultiplier, setComboMultiplier] = useState(1);
+  const [relayInfo, setRelayInfo] = useState({ current: 0, total: 0, isGuessing: false });
 
   // Chat State
   const [currentMessage, setCurrentMessage] = useState("");
@@ -247,7 +252,7 @@ function App() {
 
   const joinRoom = () => {
     if (username.trim() && room.trim()) {
-      socket.emit("join_room", { room, username, category });
+      socket.emit("join_room", { room, username, category, gameMode });
       setIsJoined(true);
     }
   };
@@ -404,6 +409,7 @@ function App() {
       setMaxTime(data.roundTime);
       setTurnInfo({ current: data.turnCurrent, total: data.turnTotal });
       setRoundInfo(data.drawerId === socket.id ? "你的回合！请画画！" : `等待 ${data.drawer} 画画...`);
+      setRelayInfo({ current: 0, total: 0, isGuessing: false }); // 重置接力信息
       
       // Reset canvas to white
       const canvas = canvasRef.current;
@@ -414,9 +420,39 @@ function App() {
       }
     });
 
+    // 接力模式：接力阶段
+    socket.on("relay_segment", (data) => {
+      setGameStarted(true);
+      setIsDrawer(data.currentDrawerId === socket.id);
+      setTimeLeft(data.roundTime);
+      setMaxTime(data.roundTime);
+      setTurnInfo({ current: data.turnCurrent, total: data.turnTotal });
+      setRelayInfo({ current: data.relayIndex + 1, total: data.relayTotal, isGuessing: false });
+      
+      if (data.currentDrawerId === socket.id) {
+        setRoundInfo(`接力画画 (${data.relayIndex + 1}/${data.relayTotal})`);
+      } else {
+        setRoundInfo(`${data.currentDrawer} 正在接力画画... (${data.relayIndex + 1}/${data.relayTotal})`);
+      }
+    });
+
+    // 接力模式：猜词阶段
+    socket.on("relay_guessing", (data) => {
+      setIsDrawer(false);
+      setCurrentWord(""); // 不显示任何提示
+      setTimeLeft(data.roundTime);
+      setMaxTime(data.roundTime);
+      setRelayInfo({ current: 0, total: 0, isGuessing: true });
+      setRoundInfo("接力完成！大家猜猜这幅画是什么？");
+    });
+
     socket.on("your_turn", (word) => {
       setCurrentWord(word);
-      setRoundInfo(`题目: ${word}`);
+      if (gameMode === 'relay') {
+        setRoundInfo(`接力题目: ${word}`);
+      } else {
+        setRoundInfo(`题目: ${word}`);
+      }
     });
 
     socket.on("timer_update", (time) => setTimeLeft(time));
@@ -426,9 +462,23 @@ function App() {
       setRoundInfo(`🎉 ${data.winner} 答对了！`);
     });
 
+    // 连击模式：连击更新
+    socket.on("combo_update", (data) => {
+      if (data.playerId === socket.id) {
+        setComboMultiplier(data.combo);
+      }
+    });
+
+    // 连击模式：重置连击
+    socket.on("combo_reset", () => {
+      setComboMultiplier(1);
+    });
+
     socket.on("game_over", (data) => {
       setLeaderboard(data.leaderboard);
       setGameStarted(false);
+      setComboMultiplier(1);
+      setRelayInfo({ current: 0, total: 0, isGuessing: false });
     });
 
     socket.on("draw_data", (data) => {
@@ -470,12 +520,16 @@ function App() {
       socket.off("clear_canvas");
       socket.off("update_players");
       socket.off("new_round");
+      socket.off("relay_segment");
+      socket.off("relay_guessing");
       socket.off("your_turn");
       socket.off("timer_update");
       socket.off("correct_guess");
+      socket.off("combo_update");
+      socket.off("combo_reset");
       socket.off("game_over");
     };
-  }, [triggerWinEffect]);
+  }, [triggerWinEffect, gameMode]);
 
   // Initialize canvas with white background
   useEffect(() => {
@@ -542,6 +596,19 @@ function App() {
                 <option value="animals">🦁 动物世界</option>
                 <option value="food">🍔 美食天地</option>
                 <option value="items">⌚️ 日常用品</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1">游戏模式</label>
+              <select 
+                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+                value={gameMode}
+                onChange={(e) => setGameMode(e.target.value)}
+              >
+                <option value="classic">🎨 经典模式 (60秒)</option>
+                <option value="lightning">⚡ 闪电模式 (30秒)</option>
+                <option value="combo">🎯 连击模式 (连续答对倍数加分)</option>
+                <option value="relay">🏃 接力模式 (多人接力画画)</option>
               </select>
             </div>
 
@@ -641,23 +708,43 @@ function App() {
                     <span className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600">
                       {currentWord || "等待中..."}
                     </span>
+                    {gameMode === 'relay' && relayInfo.current > 0 && (
+                      <span className="text-xs text-purple-600 font-bold mt-1">
+                        接力 {relayInfo.current}/{relayInfo.total}
+                      </span>
+                    )}
                   </div>
                 ) : (
                   <div className="flex flex-col items-center">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">提示</span>
                     <span className="text-xl font-bold text-slate-600">
-                      {gameStarted ? (currentWord ? `${currentWord.length} 个字` : "猜猜看！") : "准备开始"}
+                      {gameStarted ? (
+                        relayInfo.isGuessing ? "猜猜看！" :
+                        currentWord ? `${currentWord.length} 个字` : "猜猜看！"
+                      ) : "准备开始"}
                     </span>
+                    {gameMode === 'combo' && comboMultiplier > 1 && (
+                      <span className="text-xs font-black text-orange-600 mt-1 animate-pulse">
+                        🔥 {comboMultiplier}x 连击！
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
 
-              <div className="z-10">
+              <div className="z-10 flex flex-col items-end gap-1">
                 <div className={`px-4 py-2 rounded-xl font-bold text-sm ${
                   isDrawer ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
                 }`}>
                   {isDrawer ? "🎨 画家" : "🤔 猜题者"}
                 </div>
+                {gameMode !== 'classic' && (
+                  <div className="text-[10px] font-bold text-slate-500 px-2">
+                    {gameMode === 'lightning' && '⚡ 闪电'}
+                    {gameMode === 'combo' && '🎯 连击'}
+                    {gameMode === 'relay' && '🏃 接力'}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -670,7 +757,9 @@ function App() {
                 className={`w-full h-full touch-none ${
                   isDrawer 
                     ? (tool === 'bucket' ? 'cursor-cell' : 'cursor-crosshair') 
-                    : 'cursor-default pointer-events-none'
+                    : (gameMode === 'relay' && relayInfo.isGuessing)
+                      ? 'cursor-default pointer-events-none'
+                      : 'cursor-default pointer-events-none'
                 }`}
                 onClick={handleCanvasClick}
                 onMouseDown={startDrawing}
@@ -681,9 +770,14 @@ function App() {
                 onTouchMove={draw}
                 onTouchEnd={stopDrawing}
               />
-              {!isDrawer && gameStarted && (
+              {!isDrawer && gameStarted && !relayInfo.isGuessing && (
                 <div className="absolute top-3 right-3 bg-black/50 text-white text-xs px-3 py-1.5 rounded-full">
                   👀 观看模式
+                </div>
+              )}
+              {relayInfo.isGuessing && (
+                <div className="absolute top-3 right-3 bg-purple-500 text-white text-xs px-3 py-1.5 rounded-full font-bold animate-pulse">
+                  💭 猜词时间！
                 </div>
               )}
             </div>
@@ -814,15 +908,20 @@ function App() {
                 <input
                   type="text"
                   value={currentMessage}
-                  placeholder={isDrawer ? "🤫 你是画家..." : "输入答案..."}
-                  disabled={isDrawer}
+                  placeholder={
+                    isDrawer ? "🤫 你是画家..." :
+                    (gameMode === 'relay' && relayInfo.current > 0 && !relayInfo.isGuessing) ? "🤫 接力中..." :
+                    (gameMode === 'relay' && relayInfo.isGuessing) ? "猜猜这幅画是什么！" :
+                    "输入答案..."
+                  }
+                  disabled={isDrawer || (gameMode === 'relay' && relayInfo.current > 0 && !relayInfo.isGuessing)}
                   className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50 text-sm"
                   onChange={(e) => setCurrentMessage(e.target.value)}
                   onKeyPress={(e) => e.key === "Enter" && sendMessage()}
                 />
                 <button 
                   onClick={sendMessage}
-                  disabled={isDrawer || !currentMessage.trim()}
+                  disabled={isDrawer || !currentMessage.trim() || (gameMode === 'relay' && relayInfo.current > 0 && !relayInfo.isGuessing)}
                   className="bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition shadow-md"
                 >
                   <Send className="w-5 h-5" />

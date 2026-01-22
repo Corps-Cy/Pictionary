@@ -21,13 +21,42 @@ const WORD_CATEGORIES = {
   items: ["手机", "眼镜", "牙刷", "雨伞", "背包", "手表", "耳机", "台灯", "剪刀", "钥匙", "钱包"]
 };
 
+// 游戏模式配置
+const GAME_MODES = {
+  classic: {
+    name: "经典模式",
+    roundTime: 60,
+    guessScore: (timeLeft) => Math.max(10, Math.ceil(timeLeft / 2)),
+    drawerScore: 5
+  },
+  lightning: {
+    name: "闪电模式",
+    roundTime: 30,
+    guessScore: (timeLeft) => Math.max(20, Math.ceil(timeLeft)),
+    drawerScore: 10
+  },
+  combo: {
+    name: "连击模式",
+    roundTime: 60,
+    guessScore: (timeLeft, comboMultiplier = 1) => Math.max(10, Math.ceil(timeLeft / 2)) * comboMultiplier,
+    drawerScore: 5
+  },
+  relay: {
+    name: "接力模式",
+    roundTime: 30, // 每人30秒 (原15秒)
+    relayPlayers: 3, // 3个人接力
+    guessScore: (timeLeft) => Math.max(15, Math.ceil(timeLeft * 2)),
+    drawerScore: 3 // 每个接力画家得分
+  }
+};
+
 const rooms = {};
 const ROUND_TIME = 60; 
 
 io.on('connection', (socket) => {
   console.log(`User Connected: ${socket.id}`);
 
-  socket.on('join_room', ({ room, username, category = 'mix' }) => {
+  socket.on('join_room', ({ room, username, category = 'mix', gameMode = 'classic' }) => {
     socket.join(room);
     
     if (!rooms[room]) {
@@ -37,9 +66,15 @@ io.on('connection', (socket) => {
         currentWord: null,
         isPlaying: false,
         category: category,
-        roundTime: ROUND_TIME,
+        gameMode: gameMode,
+        roundTime: GAME_MODES[gameMode].roundTime,
         timerInterval: null,
-        turnCount: 0 // 记录当前是第几轮
+        turnCount: 0, // 记录当前是第几轮
+        // 接力模式专用
+        relayDrawers: [], // 接力画家队列
+        relayIndex: 0, // 当前接力到第几个人
+        // 连击模式专用
+        playerCombos: {} // 记录每个玩家的连击数
       };
     }
 
@@ -51,16 +86,24 @@ io.on('connection', (socket) => {
         avatarSeed: Math.random().toString(36).substring(7), // 随机种子用于头像
         score: 0 
       });
+      // 初始化连击数
+      if (rooms[room].gameMode === 'combo') {
+        rooms[room].playerCombos[socket.id] = 0;
+      }
     }
 
     io.to(room).emit('update_players', rooms[room].players);
-    io.to(room).emit('room_config', { category: rooms[room].category });
+    io.to(room).emit('room_config', { 
+      category: rooms[room].category,
+      gameMode: rooms[room].gameMode 
+    });
     
     if (rooms[room].isPlaying) {
       socket.emit('game_state_sync', {
         isPlaying: true,
         currentDrawer: rooms[room].currentDrawer,
-        roundTime: rooms[room].roundTime
+        roundTime: rooms[room].roundTime,
+        gameMode: rooms[room].gameMode
       });
     }
   });
@@ -87,22 +130,52 @@ io.on('connection', (socket) => {
 
   socket.on('draw_data', (data) => {
     const roomData = rooms[data.room];
-    if (roomData && roomData.currentDrawer === socket.id) {
-      socket.to(data.room).emit('draw_data', data);
+    if (roomData) {
+      // 接力模式：检查是否在接力画家队列中
+      if (roomData.gameMode === 'relay' && roomData.relayDrawers) {
+        if (roomData.relayDrawers.includes(socket.id)) {
+          socket.to(data.room).emit('draw_data', data);
+        }
+      } else {
+        // 普通模式：检查是否是当前画家
+        if (roomData.currentDrawer === socket.id) {
+          socket.to(data.room).emit('draw_data', data);
+        }
+      }
     }
   });
 
   socket.on('fill_canvas', (data) => {
     const roomData = rooms[data.room];
-    if (roomData && roomData.currentDrawer === socket.id) {
-      socket.to(data.room).emit('fill_canvas', data);
+    if (roomData) {
+      // 接力模式：检查是否在接力画家队列中
+      if (roomData.gameMode === 'relay' && roomData.relayDrawers) {
+        if (roomData.relayDrawers.includes(socket.id)) {
+          socket.to(data.room).emit('fill_canvas', data);
+        }
+      } else {
+        // 普通模式：检查是否是当前画家
+        if (roomData.currentDrawer === socket.id) {
+          socket.to(data.room).emit('fill_canvas', data);
+        }
+      }
     }
   });
 
   socket.on('clear_canvas', (room) => {
     const roomData = rooms[room];
-    if (roomData && roomData.currentDrawer === socket.id) {
-      socket.to(room).emit('clear_canvas');
+    if (roomData) {
+      // 接力模式：检查是否在接力画家队列中
+      if (roomData.gameMode === 'relay' && roomData.relayDrawers) {
+        if (roomData.relayDrawers.includes(socket.id)) {
+          socket.to(room).emit('clear_canvas');
+        }
+      } else {
+        // 普通模式：检查是否是当前画家
+        if (roomData.currentDrawer === socket.id) {
+          socket.to(room).emit('clear_canvas');
+        }
+      }
     }
   });
 
@@ -112,6 +185,17 @@ io.on('connection', (socket) => {
      if(roomData) {
          roomData.turnCount = 0;
          roomData.players.forEach(p => p.score = 0);
+         // 重置连击数
+         if (roomData.gameMode === 'combo') {
+           Object.keys(roomData.playerCombos).forEach(playerId => {
+             roomData.playerCombos[playerId] = 0;
+           });
+         }
+         // 重置接力数据
+         if (roomData.gameMode === 'relay') {
+           roomData.relayDrawers = [];
+           roomData.relayIndex = 0;
+         }
          io.to(room).emit('update_players', roomData.players);
          startNewRound(room);
      }
@@ -123,9 +207,18 @@ io.on('connection', (socket) => {
 
     if (roomData && roomData.isPlaying && roomData.currentWord) {
       if (message.trim() === roomData.currentWord) {
-        if (socket.id !== roomData.currentDrawer) {
-          handleCorrectGuess(room, socket.id, author);
-          return;
+        // 接力模式：接力画家不能猜
+        if (roomData.gameMode === 'relay' && roomData.relayDrawers) {
+          if (!roomData.relayDrawers.includes(socket.id)) {
+            handleCorrectGuess(room, socket.id, author);
+            return;
+          }
+        } else {
+          // 普通模式：画家不能猜
+          if (socket.id !== roomData.currentDrawer) {
+            handleCorrectGuess(room, socket.id, author);
+            return;
+          }
         }
       }
     }
@@ -145,18 +238,65 @@ function handleCorrectGuess(room, winnerId, winnerName) {
   clearInterval(roomData.timerInterval);
 
   const player = roomData.players.find(p => p.id === winnerId);
-  const drawer = roomData.players.find(p => p.id === roomData.currentDrawer);
+  const modeConfig = GAME_MODES[roomData.gameMode];
   
-  if (player) player.score += Math.max(10, Math.ceil(roomData.roundTime / 2));
-  if (drawer) drawer.score += 5;
-
-  io.to(room).emit('receive_message', {
-    room,
-    author: "系统",
-    message: `🎉 ${winnerName} 答对了！答案是：${roomData.currentWord}`,
-    isSystem: true,
-    type: 'success'
-  });
+  // 连击模式：增加连击数
+  if (roomData.gameMode === 'combo') {
+    roomData.playerCombos[winnerId] = (roomData.playerCombos[winnerId] || 0) + 1;
+    const comboMultiplier = Math.min(roomData.playerCombos[winnerId], 5); // 最高5倍
+    const guessScore = modeConfig.guessScore(roomData.roundTime, comboMultiplier);
+    
+    if (player) player.score += guessScore;
+    
+    // 给所有画家加分
+    if (roomData.gameMode === 'relay' && roomData.relayDrawers.length > 0) {
+      roomData.relayDrawers.forEach(drawerId => {
+        const drawer = roomData.players.find(p => p.id === drawerId);
+        if (drawer) drawer.score += modeConfig.drawerScore;
+      });
+    } else {
+      const drawer = roomData.players.find(p => p.id === roomData.currentDrawer);
+      if (drawer) drawer.score += modeConfig.drawerScore;
+    }
+    
+    io.to(room).emit('receive_message', {
+      room,
+      author: "系统",
+      message: `🎉 ${winnerName} 答对了！答案是：${roomData.currentWord} (${comboMultiplier}x 连击!)`,
+      isSystem: true,
+      type: 'success'
+    });
+    
+    // 发送连击更新
+    io.to(room).emit('combo_update', {
+      playerId: winnerId,
+      combo: comboMultiplier
+    });
+    
+  } else {
+    // 其他模式
+    const guessScore = modeConfig.guessScore(roomData.roundTime);
+    if (player) player.score += guessScore;
+    
+    // 给所有接力画家加分
+    if (roomData.gameMode === 'relay' && roomData.relayDrawers.length > 0) {
+      roomData.relayDrawers.forEach(drawerId => {
+        const drawer = roomData.players.find(p => p.id === drawerId);
+        if (drawer) drawer.score += modeConfig.drawerScore;
+      });
+    } else {
+      const drawer = roomData.players.find(p => p.id === roomData.currentDrawer);
+      if (drawer) drawer.score += modeConfig.drawerScore;
+    }
+    
+    io.to(room).emit('receive_message', {
+      room,
+      author: "系统",
+      message: `🎉 ${winnerName} 答对了！答案是：${roomData.currentWord}`,
+      isSystem: true,
+      type: 'success'
+    });
+  }
 
   io.to(room).emit('update_players', roomData.players);
   
@@ -172,13 +312,36 @@ function startNewRound(room) {
   const roomData = rooms[room];
   if (!roomData || roomData.players.length === 0) return;
 
-  // 检查游戏是否结束 (每人画过一轮)
-  // 简单逻辑：turnCount 达到 players.length
-  if (roomData.turnCount >= roomData.players.length) {
+  const modeConfig = GAME_MODES[roomData.gameMode];
+
+  // 检查游戏是否结束
+  if (roomData.gameMode === 'relay') {
+    // 接力模式：每组接力算一轮，总轮数为玩家数
+    if (roomData.turnCount >= roomData.players.length) {
       endGame(room);
       return;
+    }
+  } else {
+    // 其他模式：每人画过一轮
+    if (roomData.turnCount >= roomData.players.length) {
+      endGame(room);
+      return;
+    }
   }
 
+  // 接力模式特殊处理
+  if (roomData.gameMode === 'relay') {
+    startRelayRound(room);
+  } else {
+    startNormalRound(room);
+  }
+}
+
+// 普通模式的回合
+function startNormalRound(room) {
+  const roomData = rooms[room];
+  const modeConfig = GAME_MODES[roomData.gameMode];
+  
   // 轮换画家 (按顺序)
   const drawerIndex = roomData.turnCount % roomData.players.length;
   const nextDrawer = roomData.players[drawerIndex];
@@ -190,23 +353,157 @@ function startNewRound(room) {
   const word = categoryList[Math.floor(Math.random() * categoryList.length)];
   roomData.currentWord = word;
 
-  roomData.roundTime = ROUND_TIME;
+  roomData.roundTime = modeConfig.roundTime;
   if (roomData.timerInterval) clearInterval(roomData.timerInterval);
 
   io.to(room).emit('clear_canvas');
   io.to(room).emit('new_round', {
     drawer: nextDrawer.username,
     drawerId: nextDrawer.id,
-    roundTime: ROUND_TIME,
+    roundTime: modeConfig.roundTime,
     turnCurrent: roomData.turnCount,
-    turnTotal: roomData.players.length
+    turnTotal: roomData.players.length,
+    gameMode: roomData.gameMode
   });
   io.to(nextDrawer.id).emit('your_turn', word);
+
+  // 连击模式：清空其他玩家的连击数
+  if (roomData.gameMode === 'combo') {
+    Object.keys(roomData.playerCombos).forEach(playerId => {
+      if (playerId !== roomData.currentDrawer) {
+        roomData.playerCombos[playerId] = 0;
+      }
+    });
+    io.to(room).emit('combo_reset');
+  }
 
   roomData.timerInterval = setInterval(() => {
     roomData.roundTime--;
     io.to(room).emit('timer_update', roomData.roundTime);
 
+    if (roomData.roundTime <= 0) {
+      clearInterval(roomData.timerInterval);
+      
+      // 连击模式：时间到清空所有连击
+      if (roomData.gameMode === 'combo') {
+        Object.keys(roomData.playerCombos).forEach(playerId => {
+          roomData.playerCombos[playerId] = 0;
+        });
+        io.to(room).emit('combo_reset');
+      }
+      
+      io.to(room).emit('receive_message', {
+        room,
+        author: "系统",
+        message: `⏰ 时间到！答案是：${roomData.currentWord}`,
+        isSystem: true,
+        type: 'error'
+      });
+      setTimeout(() => startNewRound(room), 3000);
+    }
+  }, 1000);
+}
+
+// 接力模式的回合
+function startRelayRound(room) {
+  const roomData = rooms[room];
+  const modeConfig = GAME_MODES[roomData.gameMode];
+
+  // 初始化接力
+  roomData.relayIndex = 0;
+  roomData.relayDrawers = [];
+
+  // 选择接力画家（从当前轮次开始，选择N个人）
+  const relayCount = Math.min(modeConfig.relayPlayers, roomData.players.length);
+  for (let i = 0; i < relayCount; i++) {
+    const drawerIndex = (roomData.turnCount + i) % roomData.players.length;
+    roomData.relayDrawers.push(roomData.players[drawerIndex].id);
+  }
+
+  roomData.turnCount++;
+
+  // 选择题目
+  const categoryList = WORD_CATEGORIES[roomData.category] || WORD_CATEGORIES.mix;
+  const word = categoryList[Math.floor(Math.random() * categoryList.length)];
+  roomData.currentWord = word;
+
+  // 清空画布，准备接力
+  io.to(room).emit('clear_canvas');
+
+  // 接力画家可以看到具体题目（和其他模式一样）
+  roomData.relayDrawers.forEach(drawerId => {
+    io.to(drawerId).emit('your_turn', word);
+  });
+
+  // 开始第一个接力
+  startRelaySegment(room);
+}
+
+// 开始接力的某一段
+function startRelaySegment(room) {
+  const roomData = rooms[room];
+  const modeConfig = GAME_MODES[roomData.gameMode];
+  
+  if (roomData.relayIndex >= roomData.relayDrawers.length) {
+    // 接力完成，进入猜词阶段
+    startRelayGuessing(room);
+    return;
+  }
+  
+  const currentDrawerId = roomData.relayDrawers[roomData.relayIndex];
+  const currentDrawer = roomData.players.find(p => p.id === currentDrawerId);
+  roomData.currentDrawer = currentDrawerId;
+  
+  roomData.roundTime = modeConfig.roundTime;
+  if (roomData.timerInterval) clearInterval(roomData.timerInterval);
+  
+  const drawerNames = roomData.relayDrawers.map(id => {
+    const p = roomData.players.find(player => player.id === id);
+    return p ? p.username : '';
+  }).join(' → ');
+  
+  io.to(room).emit('relay_segment', {
+    currentDrawer: currentDrawer.username,
+    currentDrawerId: currentDrawerId,
+    relayIndex: roomData.relayIndex,
+    relayTotal: roomData.relayDrawers.length,
+    roundTime: modeConfig.roundTime,
+    drawerNames: drawerNames,
+    turnCurrent: roomData.turnCount,
+    turnTotal: roomData.players.length
+  });
+  
+  roomData.timerInterval = setInterval(() => {
+    roomData.roundTime--;
+    io.to(room).emit('timer_update', roomData.roundTime);
+    
+    if (roomData.roundTime <= 0) {
+      clearInterval(roomData.timerInterval);
+      // 这一段接力结束，进入下一段
+      roomData.relayIndex++;
+      setTimeout(() => startRelaySegment(room), 1500);
+    }
+  }, 1000);
+}
+
+// 接力完成后的猜词阶段
+function startRelayGuessing(room) {
+  const roomData = rooms[room];
+  const modeConfig = GAME_MODES[roomData.gameMode];
+  
+  roomData.currentDrawer = null; // 没有当前画家了，进入猜词阶段
+  roomData.roundTime = 30; // 猜词时间30秒
+  
+  io.to(room).emit('relay_guessing', {
+    roundTime: 30
+  });
+  
+  if (roomData.timerInterval) clearInterval(roomData.timerInterval);
+  
+  roomData.timerInterval = setInterval(() => {
+    roomData.roundTime--;
+    io.to(room).emit('timer_update', roomData.roundTime);
+    
     if (roomData.roundTime <= 0) {
       clearInterval(roomData.timerInterval);
       io.to(room).emit('receive_message', {

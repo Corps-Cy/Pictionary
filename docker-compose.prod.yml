@@ -1,0 +1,52 @@
+version: '3.8'
+
+# Production docker-compose with Nginx reverse proxy
+# All services behind a single port with SSL support ready
+
+services:
+  # Backend server
+  server:
+    image: ghcr.io/corps-cy/pictionary-server:latest
+    container_name: pictionary-server
+    restart: unless-stopped
+    expose:
+      - "3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    networks:
+      - pictionary-network
+
+  # Frontend client
+  client:
+    image: ghcr.io/corps-cy/pictionary-client:latest
+    container_name: pictionary-client
+    restart: unless-stopped
+    expose:
+      - "80"
+    depends_on:
+      - server
+    networks:
+      - pictionary-network
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: pictionary-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # Uncomment below for SSL certificates
+      # - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - client
+      - server
+    networks:
+      - pictionary-network
+
+networks:
+  pictionary-network:
+    driver: bridge

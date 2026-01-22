@@ -1,0 +1,37 @@
+version: '3.8'
+
+# Development docker-compose - builds from source
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: pictionary-server-dev
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+    networks:
+      - pictionary-network
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        - VITE_SOCKET_URL=http://localhost:3001
+    container_name: pictionary-client-dev
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    networks:
+      - pictionary-network
+
+networks:
+  pictionary-network:
+    driver: bridge

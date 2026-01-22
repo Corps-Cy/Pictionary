@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  # Backend server
+  server:
+    image: ghcr.io/corps-cy/pictionary-server:latest
+    container_name: pictionary-server
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    networks:
+      - pictionary-network
+
+  # Frontend client
+  client:
+    image: ghcr.io/corps-cy/pictionary-client:latest
+    container_name: pictionary-client
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    networks:
+      - pictionary-network
+
+networks:
+  pictionary-network:
+    driver: bridge

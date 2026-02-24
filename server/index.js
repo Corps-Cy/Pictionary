@@ -47,6 +47,12 @@ const GAME_MODES = {
     relayPlayers: 3, // 3个人接力
     guessScore: (timeLeft) => Math.max(15, Math.ceil(timeLeft * 2)),
     drawerScore: 3 // 每个接力画家得分
+  },
+  blind: {
+    name: "盲画模式",
+    roundTime: 60,
+    guessScore: (timeLeft) => Math.max(20, Math.ceil(timeLeft)), // 盲画更难，分更高
+    drawerScore: 10 // 盲画更难，画家分更高
   }
 };
 
@@ -162,6 +168,59 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('draw_shape', (data) => {
+    const roomData = rooms[data.room];
+    if (roomData) {
+      // 接力模式：检查是否在接力画家队列中
+      if (roomData.gameMode === 'relay' && roomData.relayDrawers) {
+        if (roomData.relayDrawers.includes(socket.id)) {
+          socket.to(data.room).emit('draw_shape', data);
+        }
+      } else {
+        // 普通模式：检查是否是当前画家
+        if (roomData.currentDrawer === socket.id) {
+          socket.to(data.room).emit('draw_shape', data);
+        }
+      }
+    }
+  });
+
+  // Sticker events
+  socket.on('add_sticker', (data) => {
+    const roomData = rooms[data.room];
+    if (roomData) {
+      // 接力模式：检查是否在接力画家队列中
+      if (roomData.gameMode === 'relay' && roomData.relayDrawers) {
+        if (roomData.relayDrawers.includes(socket.id)) {
+          socket.to(data.room).emit('add_sticker', data);
+        }
+      } else {
+        // 普通模式：检查是否是当前画家
+        if (roomData.currentDrawer === socket.id) {
+          socket.to(data.room).emit('add_sticker', data);
+        }
+      }
+    }
+  });
+
+  socket.on('update_sticker', (data) => {
+    const roomData = rooms[data.room];
+    if (roomData) {
+      if (roomData.currentDrawer === socket.id) {
+        socket.to(data.room).emit('update_sticker', data);
+      }
+    }
+  });
+
+  socket.on('delete_sticker', (data) => {
+    const roomData = rooms[data.room];
+    if (roomData) {
+      if (roomData.currentDrawer === socket.id) {
+        socket.to(data.room).emit('delete_sticker', data);
+      }
+    }
+  });
+
   socket.on('clear_canvas', (room) => {
     const roomData = rooms[room];
     if (roomData) {
@@ -174,6 +233,42 @@ io.on('connection', (socket) => {
         // 普通模式：检查是否是当前画家
         if (roomData.currentDrawer === socket.id) {
           socket.to(room).emit('clear_canvas');
+        }
+      }
+    }
+  });
+
+  // Undo event
+  socket.on('undo', (data) => {
+    const roomData = rooms[data.room];
+    if (roomData) {
+      // 接力模式：检查是否在接力画家队列中
+      if (roomData.gameMode === 'relay' && roomData.relayDrawers) {
+        if (roomData.relayDrawers.includes(socket.id)) {
+          socket.to(data.room).emit('undo');
+        }
+      } else {
+        // 普通模式：检查是否是当前画家
+        if (roomData.currentDrawer === socket.id) {
+          socket.to(data.room).emit('undo');
+        }
+      }
+    }
+  });
+
+  // Redo event
+  socket.on('redo', (data) => {
+    const roomData = rooms[data.room];
+    if (roomData) {
+      // 接力模式：检查是否在接力画家队列中
+      if (roomData.gameMode === 'relay' && roomData.relayDrawers) {
+        if (roomData.relayDrawers.includes(socket.id)) {
+          socket.to(data.room).emit('redo');
+        }
+      } else {
+        // 普通模式：检查是否是当前画家
+        if (roomData.currentDrawer === socket.id) {
+          socket.to(data.room).emit('redo');
         }
       }
     }

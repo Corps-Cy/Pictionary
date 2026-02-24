@@ -1,16 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import io from 'socket.io-client';
 import confetti from 'canvas-confetti';
-import {
-  Pencil, Eraser, Trash2, Send, Play, Users,
-  Palette, Timer, Crown, MessageCircle, PaintBucket, RotateCcw,
-  RotateCw, Undo, Redo, Square, Circle, Minus, ArrowUpRight,
-  Sticker, X, Search, Star
+import { 
+  Pencil, Eraser, Trash2, Send, Play, Users, 
+  Palette, Timer, Crown, MessageCircle, PaintBucket, RotateCcw
 } from 'lucide-react';
-import { STICKER_CATEGORIES, STICKERS, getStickersByCategory, getRecommendedStickers } from './stickers.js';
 
 // In production with nginx proxy, use relative path. In dev, use localhost:3001
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ||
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 
   (import.meta.env.PROD ? window.location.origin : "http://localhost:3001");
 const socket = io.connect(SOCKET_URL, {
   path: '/socket.io/',
@@ -21,7 +18,7 @@ const socket = io.connect(SOCKET_URL, {
 function floodFill(ctx, startX, startY, fillColor, canvasWidth, canvasHeight) {
   const imageData = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
   const data = imageData.data;
-
+  
   // Convert hex color to RGB
   const hexToRgb = (hex) => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -31,25 +28,25 @@ function floodFill(ctx, startX, startY, fillColor, canvasWidth, canvasHeight) {
       b: parseInt(result[3], 16)
     } : { r: 0, g: 0, b: 0 };
   };
-
+  
   const fillRgb = hexToRgb(fillColor);
-
+  
   // Get pixel index
   const getPixelIndex = (x, y) => (y * canvasWidth + x) * 4;
-
+  
   // Get pixel color at position
   const getPixelColor = (x, y) => {
     const idx = getPixelIndex(x, y);
     return { r: data[idx], g: data[idx + 1], b: data[idx + 2], a: data[idx + 3] };
   };
-
+  
   // Check if colors match (with tolerance)
   const colorsMatch = (c1, c2, tolerance = 32) => {
     return Math.abs(c1.r - c2.r) <= tolerance &&
            Math.abs(c1.g - c2.g) <= tolerance &&
            Math.abs(c1.b - c2.b) <= tolerance;
   };
-
+  
   // Set pixel color
   const setPixelColor = (x, y) => {
     const idx = getPixelIndex(x, y);
@@ -58,33 +55,33 @@ function floodFill(ctx, startX, startY, fillColor, canvasWidth, canvasHeight) {
     data[idx + 2] = fillRgb.b;
     data[idx + 3] = 255;
   };
-
+  
   const startColor = getPixelColor(Math.floor(startX), Math.floor(startY));
-
+  
   // Don't fill if clicking on same color
   if (colorsMatch(startColor, fillRgb, 10)) return;
-
+  
   // Stack-based flood fill (non-recursive to avoid stack overflow)
   const stack = [[Math.floor(startX), Math.floor(startY)]];
   const visited = new Set();
-
+  
   while (stack.length > 0) {
     const [x, y] = stack.pop();
     const key = `${x},${y}`;
-
+    
     if (visited.has(key)) continue;
     if (x < 0 || x >= canvasWidth || y < 0 || y >= canvasHeight) continue;
-
+    
     const currentColor = getPixelColor(x, y);
     if (!colorsMatch(currentColor, startColor)) continue;
-
+    
     visited.add(key);
     setPixelColor(x, y);
-
+    
     // Add neighbors (4-directional)
     stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
   }
-
+  
   ctx.putImageData(imageData, 0, 0);
 }
 
@@ -94,7 +91,7 @@ function Podium({ leaderboard, onRestart }) {
     // Fireworks effect
     const duration = 5000;
     const end = Date.now() + duration;
-
+    
     const frame = () => {
       confetti({
         particleCount: 3,
@@ -110,7 +107,7 @@ function Podium({ leaderboard, onRestart }) {
         origin: { x: 1 },
         colors: ['#FFD700', '#FFA500', '#FF6347']
       });
-
+      
       if (Date.now() < end) requestAnimationFrame(frame);
     };
     frame();
@@ -129,14 +126,14 @@ function Podium({ leaderboard, onRestart }) {
         <h1 className="text-4xl font-black text-center mb-8 bg-clip-text text-transparent bg-gradient-to-r from-yellow-500 via-orange-500 to-red-500">
           🎉 游戏结束 🎉
         </h1>
-
+        
         {/* Podium Display */}
         <div className="flex justify-center items-end gap-4 mb-8 h-48">
           {/* 2nd Place */}
           {leaderboard[1] && (
             <div className="flex flex-col items-center">
-              <img
-                src={`https://api.dicebear.com/7.x/notionists/svg?seed=${leaderboard[1].avatarSeed}`}
+              <img 
+                src={`https://api.dicebear.com/7.x/notionists/svg?seed=${leaderboard[1].avatarSeed}`} 
                 className="w-16 h-16 rounded-full border-4 border-gray-300 bg-white shadow-lg mb-2"
                 alt="2nd"
               />
@@ -147,13 +144,13 @@ function Podium({ leaderboard, onRestart }) {
               </div>
             </div>
           )}
-
+          
           {/* 1st Place */}
           {leaderboard[0] && (
             <div className="flex flex-col items-center">
               <div className="text-3xl animate-bounce">👑</div>
-              <img
-                src={`https://api.dicebear.com/7.x/notionists/svg?seed=${leaderboard[0].avatarSeed}`}
+              <img 
+                src={`https://api.dicebear.com/7.x/notionists/svg?seed=${leaderboard[0].avatarSeed}`} 
                 className="w-20 h-20 rounded-full border-4 border-yellow-400 bg-white shadow-lg mb-2"
                 alt="1st"
               />
@@ -164,12 +161,12 @@ function Podium({ leaderboard, onRestart }) {
               </div>
             </div>
           )}
-
+          
           {/* 3rd Place */}
           {leaderboard[2] && (
             <div className="flex flex-col items-center">
-              <img
-                src={`https://api.dicebear.com/7.x/notionists/svg?seed=${leaderboard[2].avatarSeed}`}
+              <img 
+                src={`https://api.dicebear.com/7.x/notionists/svg?seed=${leaderboard[2].avatarSeed}`} 
                 className="w-14 h-14 rounded-full border-4 border-orange-300 bg-white shadow-lg mb-2"
                 alt="3rd"
               />
@@ -188,8 +185,8 @@ function Podium({ leaderboard, onRestart }) {
             <div key={p.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
               <div className="flex items-center gap-3">
                 <span className="w-6 text-center font-bold text-gray-400">#{idx + 1}</span>
-                <img
-                  src={`https://api.dicebear.com/7.x/notionists/svg?seed=${p.avatarSeed}`}
+                <img 
+                  src={`https://api.dicebear.com/7.x/notionists/svg?seed=${p.avatarSeed}`} 
                   className="w-8 h-8 rounded-full bg-white"
                   alt=""
                 />
@@ -199,8 +196,8 @@ function Podium({ leaderboard, onRestart }) {
             </div>
           ))}
         </div>
-
-        <button
+        
+        <button 
           onClick={onRestart}
           className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 rounded-xl hover:shadow-lg transition font-bold text-lg flex items-center justify-center gap-2"
         >
@@ -220,7 +217,7 @@ function App() {
   const [category, setCategory] = useState("mix");
   const [gameMode, setGameMode] = useState("classic");
   const [players, setPlayers] = useState([]);
-
+  
   // Game State
   const [gameStarted, setGameStarted] = useState(false);
   const [isDrawer, setIsDrawer] = useState(false);
@@ -230,7 +227,7 @@ function App() {
   const [maxTime, setMaxTime] = useState(60);
   const [turnInfo, setTurnInfo] = useState({ current: 0, total: 0 });
   const [leaderboard, setLeaderboard] = useState(null);
-
+  
   // 新增：游戏模式相关状态
   const [comboMultiplier, setComboMultiplier] = useState(1);
   const [relayInfo, setRelayInfo] = useState({ current: 0, total: 0, isGuessing: false });
@@ -242,27 +239,11 @@ function App() {
 
   // Canvas State
   const canvasRef = useRef(null);
-  const previewCanvasRef = useRef(null);
   const [color, setColor] = useState("#3b82f6");
   const [lineWidth, setLineWidth] = useState(4);
-  const [tool, setTool] = useState('pen'); // 'pen', 'eraser', 'bucket', 'rect', 'circle', 'arrow', 'line'
+  const [tool, setTool] = useState('pen'); // 'pen', 'eraser', 'bucket'
   const isDrawing = useRef(false);
   const lastPos = useRef({ x: 0, y: 0 });
-  const shapeStartPos = useRef({ x: 0, y: 0 }); // 形状起始位置
-
-  // History State (Undo/Redo)
-  const [history, setHistory] = useState([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
-  const maxHistory = 50; // 最多保存50步历史
-
-  // Sticker State
-  const [stickerPanelOpen, setStickerPanelOpen] = useState(false);
-  const [stickerCategory, setStickerCategory] = useState('emotions');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [placedStickers, setPlacedStickers] = useState([]);
-  const [selectedStickerId, setSelectedStickerId] = useState(null);
-  const [draggedSticker, setDraggedSticker] = useState(null);
-  const stickerDropZoneRef = useRef(null);
 
   // Auto scroll chat
   useEffect(() => {
@@ -293,9 +274,9 @@ function App() {
         message: currentMessage,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
-
+      
       socket.emit("send_message", messageData);
-      setMessageList((list) => [...list, messageData]);
+      setMessageList((list) => [...list, messageData]); 
       setCurrentMessage("");
     }
   };
@@ -306,169 +287,7 @@ function App() {
     const ctx = canvas.getContext("2d");
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    saveToHistory();
     socket.emit("clear_canvas", room);
-  };
-
-  // Save canvas state to history
-  const saveToHistory = () => {
-    if (!isDrawer) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-    // Remove redo states
-    const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push(imageData);
-
-    // Limit history size
-    if (newHistory.length > maxHistory) {
-      newHistory.shift();
-    }
-
-    setHistory(newHistory);
-    setHistoryIndex(newHistory.length - 1);
-  };
-
-  // Undo
-  const handleUndo = () => {
-    if (!isDrawer || historyIndex <= 0) return;
-
-    const newIndex = historyIndex - 1;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-
-    ctx.putImageData(history[newIndex], 0, 0);
-    setHistoryIndex(newIndex);
-    socket.emit("undo", { room });
-  };
-
-  // Redo
-  const handleRedo = () => {
-    if (!isDrawer || historyIndex >= history.length - 1) return;
-
-    const newIndex = historyIndex + 1;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-
-    ctx.putImageData(history[newIndex], 0, 0);
-    setHistoryIndex(newIndex);
-    socket.emit("redo", { room });
-  };
-
-  // ============== Sticker Functions ==============
-
-  // 添加贴纸
-  const addSticker = (emoji, x, y, scale = 1, rotation = 0) => {
-    if (!isDrawer) return;
-
-    const newSticker = {
-      id: `sticker_${Date.now()}_${Math.random()}`,
-      emoji,
-      x,
-      y,
-      scale,
-      rotation,
-      opacity: 1,
-      zIndex: placedStickers.length + 10
-    };
-
-    setPlacedStickers([...placedStickers, newSticker]);
-    saveToHistory();
-
-    socket.emit("add_sticker", {
-      room,
-      sticker: newSticker
-    });
-  };
-
-  // 更新贴纸
-  const updateSticker = (stickerId, updates) => {
-    if (!isDrawer) return;
-
-    setPlacedStickers(placedStickers.map(sticker =>
-      sticker.id === stickerId ? { ...sticker, ...updates } : sticker
-    ));
-
-    socket.emit("update_sticker", {
-      room,
-      stickerId,
-      updates
-    });
-  };
-
-  // 删除贴纸
-  const deleteSticker = (stickerId) => {
-    if (!isDrawer) return;
-
-    setPlacedStickers(placedStickers.filter(s => s.id !== stickerId));
-    setSelectedStickerId(null);
-    saveToHistory();
-
-    socket.emit("delete_sticker", {
-      room,
-      stickerId
-    });
-  };
-
-  // 渲染贴纸
-  const renderStickers = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
-
-    // 清空画布并重新渲染所有内容（贴纸在顶层）
-    // 注意：这需要保存当前的绘画内容
-    // 简化版：直接在画布上绘制贴纸
-    placedStickers.forEach(sticker => {
-      ctx.save();
-      ctx.globalAlpha = sticker.opacity;
-      ctx.translate(sticker.x, sticker.y);
-      ctx.rotate(sticker.rotation * Math.PI / 180);
-      ctx.scale(sticker.scale, sticker.scale);
-
-      ctx.font = '48px serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-
-      // 选中状态效果
-      if (selectedStickerId === sticker.id) {
-        ctx.shadowColor = '#3b82f6';
-        ctx.shadowBlur = 10;
-      }
-
-      ctx.fillText(sticker.emoji, 0, 0);
-      ctx.restore();
-    });
-  };
-
-  // 贴纸拖拽开始
-  const handleStickerDragStart = (event, emoji) => {
-    event.preventDefault();
-    setDraggedSticker(emoji);
-  };
-
-  // 贴纸放置
-  const handleStickerDrop = (event) => {
-    event.preventDefault();
-    if (!draggedSticker || !isDrawer) return;
-
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const x = (event.clientX - rect.left) * (canvas.width / rect.width);
-    const y = (event.clientY - rect.top) * (canvas.height / rect.height);
-
-    addSticker(draggedSticker, x, y);
-    setDraggedSticker(null);
-    setStickerPanelOpen(false);
-  };
-
-  // 贴纸拖拽覆盖
-  const handleStickerDragOver = (event) => {
-    event.preventDefault();
   };
 
   // Coordinate helper
@@ -492,18 +311,14 @@ function App() {
   // Canvas drawing handlers
   const handleCanvasClick = (event) => {
     if (!isDrawer) return;
-
+    
     if (tool === 'bucket') {
       const { x, y } = getCoordinates(event);
-
-      // 盲画模式：画家只发送不渲染
-      if (gameMode !== 'blind') {
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext("2d");
-
-        floodFill(ctx, x, y, color, canvas.width, canvas.height);
-      }
-
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext("2d");
+      
+      floodFill(ctx, x, y, color, canvas.width, canvas.height);
+      
       socket.emit("fill_canvas", { room, x, y, color });
     }
   };
@@ -511,20 +326,10 @@ function App() {
   const startDrawing = (event) => {
     if (!isDrawer || tool === 'bucket') return;
     event.preventDefault();
-
+    
     const { x, y } = getCoordinates(event);
     isDrawing.current = true;
     lastPos.current = { x, y };
-    shapeStartPos.current = { x, y }; // 保存形状起始位置
-
-    // 形状工具开始时，先保存当前画布状态到预览层
-    if (['rect', 'circle', 'arrow', 'line'].includes(tool)) {
-      const previewCanvas = previewCanvasRef.current;
-      if (previewCanvas) {
-        const previewCtx = previewCanvas.getContext("2d");
-        previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-      }
-    }
   };
 
   const draw = (event) => {
@@ -532,72 +337,17 @@ function App() {
     event.preventDefault();
 
     const { x, y } = getCoordinates(event);
+    const ctx = canvasRef.current.getContext("2d");
+    
+    ctx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
+    ctx.lineWidth = lineWidth;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
 
-    // 形状工具：在预览层绘制预览
-    if (['rect', 'circle', 'arrow', 'line'].includes(tool)) {
-      const previewCanvas = previewCanvasRef.current;
-      if (!previewCanvas) return;
-
-      const previewCtx = previewCanvas.getContext("2d");
-      const startX = shapeStartPos.current.x;
-      const startY = shapeStartPos.current.y;
-
-      // 清除预览层
-      previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-
-      // 绘制形状预览
-      previewCtx.strokeStyle = color;
-      previewCtx.lineWidth = lineWidth;
-      previewCtx.lineCap = "round";
-      previewCtx.lineJoin = "round";
-
-      if (tool === 'rect') {
-        const width = x - startX;
-        const height = y - startY;
-        previewCtx.strokeRect(startX, startY, width, height);
-      } else if (tool === 'circle') {
-        const radius = Math.sqrt(Math.pow(x - startX, 2) + Math.pow(y - startY, 2));
-        previewCtx.beginPath();
-        previewCtx.arc(startX, startY, radius, 0, Math.PI * 2);
-        previewCtx.stroke();
-      } else if (tool === 'line') {
-        previewCtx.beginPath();
-        previewCtx.moveTo(startX, startY);
-        previewCtx.lineTo(x, y);
-        previewCtx.stroke();
-      } else if (tool === 'arrow') {
-        const headLength = lineWidth * 3;
-        const dx = x - startX;
-        const dy = y - startY;
-        const angle = Math.atan2(dy, dx);
-
-        previewCtx.beginPath();
-        previewCtx.moveTo(startX, startY);
-        previewCtx.lineTo(x, y);
-        previewCtx.lineTo(x - headLength * Math.cos(angle - Math.PI / 6), y - headLength * Math.sin(angle - Math.PI / 6));
-        previewCtx.moveTo(x, y);
-        previewCtx.lineTo(x - headLength * Math.cos(angle + Math.PI / 6), y - headLength * Math.sin(angle + Math.PI / 6));
-        previewCtx.stroke();
-      }
-
-      return;
-    }
-
-    // 普通绘图：画笔和橡皮擦
-    // 盲画模式：画家不渲染自己的绘画
-    if (gameMode !== 'blind' || !isDrawer) {
-      const ctx = canvasRef.current.getContext("2d");
-
-      ctx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
-      ctx.lineWidth = lineWidth;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-
-      ctx.beginPath();
-      ctx.moveTo(lastPos.current.x, lastPos.current.y);
-      ctx.lineTo(x, y);
-      ctx.stroke();
-    }
+    ctx.beginPath();
+    ctx.moveTo(lastPos.current.x, lastPos.current.y);
+    ctx.lineTo(x, y);
+    ctx.stroke();
 
     socket.emit("draw_data", {
       room,
@@ -612,148 +362,7 @@ function App() {
     lastPos.current = { x, y };
   };
 
-  const stopDrawing = (event) => {
-    if (!isDrawing.current) return;
-
-    const { x, y } = getCoordinates(event);
-    const startX = shapeStartPos.current.x;
-    const startY = shapeStartPos.current.y;
-
-    // 形状工具：提交到主画布
-    // 盲画模式：画家不渲染自己的形状
-    if (['rect', 'circle', 'arrow', 'line'].includes(tool)) {
-      if (gameMode !== 'blind' || !isDrawer) {
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext("2d");
-
-        ctx.strokeStyle = color;
-        ctx.lineWidth = lineWidth;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-
-        if (tool === 'rect') {
-          const width = x - startX;
-          const height = y - startY;
-          ctx.strokeRect(startX, startY, width, height);
-
-          socket.emit("draw_shape", {
-            room,
-            shape: 'rect',
-            x: startX, y: startY,
-            width, height,
-            color,
-            size: lineWidth
-          });
-        } else if (tool === 'circle') {
-          const radius = Math.sqrt(Math.pow(x - startX, 2) + Math.pow(y - startY, 2));
-          ctx.beginPath();
-          ctx.arc(startX, startY, radius, 0, Math.PI * 2);
-          ctx.stroke();
-
-          socket.emit("draw_shape", {
-            room,
-            shape: 'circle',
-            x: startX, y: startY,
-            radius,
-            color,
-            size: lineWidth
-          });
-        } else if (tool === 'line') {
-          ctx.beginPath();
-          ctx.moveTo(startX, startY);
-          ctx.lineTo(x, y);
-          ctx.stroke();
-
-          socket.emit("draw_shape", {
-            room,
-            shape: 'line',
-            x1: startX, y1: startY,
-            x2: x, y2: y,
-            color,
-            size: lineWidth
-          });
-        } else if (tool === 'arrow') {
-          const headLength = lineWidth * 3;
-          const dx = x - startX;
-          const dy = y - startY;
-          const angle = Math.atan2(dy, dx);
-
-          ctx.beginPath();
-          ctx.moveTo(startX, startY);
-          ctx.lineTo(x, y);
-          ctx.lineTo(x - headLength * Math.cos(angle - Math.PI / 6), y - headLength * Math.sin(angle - Math.PI / 6));
-          ctx.moveTo(x, y);
-          ctx.lineTo(x - headLength * Math.cos(angle + Math.PI / 6), y - headLength * Math.sin(angle + Math.PI / 6));
-          ctx.stroke();
-
-          socket.emit("draw_shape", {
-            room,
-            shape: 'arrow',
-            x1: startX, y1: startY,
-            x2: x, y2: y,
-            headLength,
-            color,
-            size: lineWidth
-          });
-        }
-      } else {
-        // 盲画模式下画家只发送不渲染
-        if (tool === 'rect') {
-          const width = x - startX;
-          const height = y - startY;
-          socket.emit("draw_shape", {
-            room,
-            shape: 'rect',
-            x: startX, y: startY,
-            width, height,
-            color,
-            size: lineWidth
-          });
-        } else if (tool === 'circle') {
-          const radius = Math.sqrt(Math.pow(x - startX, 2) + Math.pow(y - startY, 2));
-          socket.emit("draw_shape", {
-            room,
-            shape: 'circle',
-            x: startX, y: startY,
-            radius,
-            color,
-            size: lineWidth
-          });
-        } else if (tool === 'line') {
-          socket.emit("draw_shape", {
-            room,
-            shape: 'line',
-            x1: startX, y1: startY,
-            x2: x, y2: y,
-            color,
-            size: lineWidth
-          });
-        } else if (tool === 'arrow') {
-          const headLength = lineWidth * 3;
-          const dx = x - startX;
-          const dy = y - startY;
-          const angle = Math.atan2(dy, dx);
-          socket.emit("draw_shape", {
-            room,
-            shape: 'arrow',
-            x1: startX, y1: startY,
-            x2: x, y2: y,
-            headLength,
-            color,
-            size: lineWidth
-          });
-        }
-      }
-
-      // 清除预览层
-      const previewCanvas = previewCanvasRef.current;
-      if (previewCanvas) {
-        const previewCtx = previewCanvas.getContext("2d");
-        previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-      }
-    }
-
-    saveToHistory();
+  const stopDrawing = () => {
     isDrawing.current = false;
   };
 
@@ -767,9 +376,9 @@ function App() {
     } else if (type === 2) {
       const interval = setInterval(() => {
         if (Date.now() > end) return clearInterval(interval);
-        confetti({
-          startVelocity: 30, spread: 360, ticks: 60, zIndex: 0,
-          particleCount: 50, origin: { x: Math.random(), y: Math.random() - 0.2 }
+        confetti({ 
+          startVelocity: 30, spread: 360, ticks: 60, zIndex: 0, 
+          particleCount: 50, origin: { x: Math.random(), y: Math.random() - 0.2 } 
         });
       }, 250);
     } else if (type === 3) {
@@ -795,13 +404,13 @@ function App() {
     socket.on("new_round", (data) => {
       setGameStarted(true);
       setIsDrawer(data.drawerId === socket.id);
-      setCurrentWord("");
+      setCurrentWord(""); 
       setTimeLeft(data.roundTime);
       setMaxTime(data.roundTime);
       setTurnInfo({ current: data.turnCurrent, total: data.turnTotal });
       setRoundInfo(data.drawerId === socket.id ? "你的回合！请画画！" : `等待 ${data.drawer} 画画...`);
       setRelayInfo({ current: 0, total: 0, isGuessing: false }); // 重置接力信息
-
+      
       // Reset canvas to white
       const canvas = canvasRef.current;
       if (canvas) {
@@ -809,10 +418,6 @@ function App() {
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
-
-      // Reset history
-      setHistory([]);
-      setHistoryIndex(-1);
     });
 
     // 接力模式：接力阶段
@@ -823,7 +428,7 @@ function App() {
       setMaxTime(data.roundTime);
       setTurnInfo({ current: data.turnCurrent, total: data.turnTotal });
       setRelayInfo({ current: data.relayIndex + 1, total: data.relayTotal, isGuessing: false });
-
+      
       if (data.currentDrawerId === socket.id) {
         setRoundInfo(`接力画画 (${data.relayIndex + 1}/${data.relayTotal})`);
       } else {
@@ -877,13 +482,10 @@ function App() {
     });
 
     socket.on("draw_data", (data) => {
-      // 盲画模式：画家不渲染自己的绘制
-      if (gameMode === 'blind' && isDrawer) return;
-
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext("2d");
-
+      
       ctx.strokeStyle = data.color;
       ctx.lineWidth = data.size;
       ctx.lineCap = "round";
@@ -896,50 +498,10 @@ function App() {
     });
 
     socket.on("fill_canvas", (data) => {
-      // 盲画模式：画家不渲染自己的填充
-      if (gameMode === 'blind' && isDrawer) return;
-
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext("2d");
       floodFill(ctx, data.x, data.y, data.color, canvas.width, canvas.height);
-    });
-
-    socket.on("draw_shape", (data) => {
-      // 盲画模式：画家不渲染自己的形状
-      if (gameMode === 'blind' && isDrawer) return;
-
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext("2d");
-
-      ctx.strokeStyle = data.color;
-      ctx.lineWidth = data.size;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-
-      if (data.shape === 'rect') {
-        ctx.strokeRect(data.x, data.y, data.width, data.height);
-      } else if (data.shape === 'circle') {
-        ctx.beginPath();
-        ctx.arc(data.x, data.y, data.radius, 0, Math.PI * 2);
-        ctx.stroke();
-      } else if (data.shape === 'line') {
-        ctx.beginPath();
-        ctx.moveTo(data.x1, data.y1);
-        ctx.lineTo(data.x2, data.y2);
-        ctx.stroke();
-      } else if (data.shape === 'arrow') {
-        const angle = Math.atan2(data.y2 - data.y1, data.x2 - data.x1);
-
-        ctx.beginPath();
-        ctx.moveTo(data.x1, data.y1);
-        ctx.lineTo(data.x2, data.y2);
-        ctx.lineTo(data.x2 - data.headLength * Math.cos(angle - Math.PI / 6), data.y2 - data.headLength * Math.sin(angle - Math.PI / 6));
-        ctx.moveTo(data.x2, data.y2);
-        ctx.lineTo(data.x2 - data.headLength * Math.cos(angle + Math.PI / 6), data.y2 - data.headLength * Math.sin(angle + Math.PI / 6));
-        ctx.stroke();
-      }
     });
 
     socket.on("clear_canvas", () => {
@@ -949,60 +511,13 @@ function App() {
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
-      // Reset history when canvas is cleared by drawer
-      if (!isDrawer) {
-        setHistory([]);
-        setHistoryIndex(-1);
-      }
-    });
-
-    socket.on("undo", () => {
-      if (!isDrawer) {
-        // Viewer: just clear the canvas, drawer will send the new state
-        const canvas = canvasRef.current;
-        if (canvas) {
-          const ctx = canvas.getContext("2d");
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-        }
-      }
-    });
-
-    socket.on("redo", () => {
-      if (!isDrawer) {
-        // Viewer: similar to undo
-        const canvas = canvasRef.current;
-        if (canvas) {
-          const ctx = canvas.getContext("2d");
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-        }
-      }
-    });
-
-    // Sticker events
-    socket.on("add_sticker", (data) => {
-      setPlacedStickers([...placedStickers, data.sticker]);
-    });
-
-    socket.on("update_sticker", (data) => {
-      setPlacedStickers(placedStickers.map(sticker =>
-        sticker.id === data.stickerId ? { ...sticker, ...data.updates } : sticker
-      ));
-    });
-
-    socket.on("delete_sticker", (data) => {
-      setPlacedStickers(placedStickers.filter(s => s.id !== data.stickerId));
     });
 
     return () => {
       socket.off("receive_message");
       socket.off("draw_data");
-      socket.off("draw_shape");
       socket.off("fill_canvas");
       socket.off("clear_canvas");
-      socket.off("undo");
-      socket.off("redo");
       socket.off("update_players");
       socket.off("new_round");
       socket.off("relay_segment");
@@ -1025,39 +540,17 @@ function App() {
     }
   }, [isJoined]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (!isDrawer || !gameStarted) return;
-
-      // Ctrl+Z for undo
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-        e.preventDefault();
-        handleUndo();
-      }
-
-      // Ctrl+Y or Ctrl+Shift+Z for redo
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
-        e.preventDefault();
-        handleRedo();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDrawer, gameStarted, history, historyIndex]);
-
   const colors = [
-    '#000000', '#ef4444', '#f97316', '#eab308', '#22c55e',
+    '#000000', '#ef4444', '#f97316', '#eab308', '#22c55e', 
     '#3b82f6', '#8b5cf6', '#ec4899', '#78716c', '#ffffff'
   ];
 
   return (
     <div className="min-h-screen font-sans text-slate-800 bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100 flex items-center justify-center p-4">
-
+      
       {/* Podium Modal */}
       {leaderboard && <Podium leaderboard={leaderboard} onRestart={restartGame} />}
-
+      
       {!isJoined ? (
         // ============== Login Screen ==============
         <div className="bg-white/90 backdrop-blur-xl p-8 rounded-3xl shadow-2xl w-full max-w-md border border-white/50">
@@ -1070,7 +563,7 @@ function App() {
             </h1>
             <p className="text-slate-500 mt-2">创意绘画 · 实时互动 · 欢乐派对</p>
           </div>
-
+          
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-600 mb-1">昵称</label>
@@ -1094,7 +587,7 @@ function App() {
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-600 mb-1">词库类型</label>
-              <select
+              <select 
                 className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
@@ -1107,7 +600,7 @@ function App() {
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-600 mb-1">游戏模式</label>
-              <select
+              <select 
                 className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
                 value={gameMode}
                 onChange={(e) => setGameMode(e.target.value)}
@@ -1116,11 +609,10 @@ function App() {
                 <option value="lightning">⚡ 闪电模式 (30秒)</option>
                 <option value="combo">🎯 连击模式 (连续答对倍数加分)</option>
                 <option value="relay">🏃 接力模式 (多人接力画画)</option>
-                <option value="blind">🤪 盲画模式 (画家看不到自己的画)</option>
               </select>
             </div>
 
-            <button
+            <button 
               onClick={joinRoom}
               className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 rounded-xl hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all font-bold text-lg mt-2"
             >
@@ -1131,7 +623,7 @@ function App() {
       ) : (
         // ============== Game Screen ==============
         <div className="flex flex-col lg:flex-row gap-4 w-full max-w-7xl h-[95vh]">
-
+          
           {/* Left: Player List */}
           <div className="w-full lg:w-64 bg-white/90 backdrop-blur-md rounded-2xl shadow-xl flex flex-col border border-white/50 overflow-hidden">
             <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-purple-50">
@@ -1145,7 +637,7 @@ function App() {
                   idx === 0 && p.score > 0 ? 'bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200' : 'bg-slate-50'
                 }`}>
                   <div className="relative">
-                    <img
+                    <img 
                       src={`https://api.dicebear.com/7.x/notionists/svg?seed=${p.avatarSeed}`}
                       className="w-10 h-10 rounded-full bg-white shadow-sm"
                       alt=""
@@ -1164,10 +656,10 @@ function App() {
                 </div>
               ))}
             </div>
-
+            
             <div className="p-3 border-t border-slate-100">
               {!gameStarted && players.length >= 2 && (
-                <button
+                <button 
                   onClick={startGame}
                   className="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold py-3 rounded-xl transition shadow-lg hover:shadow-green-200 flex items-center justify-center gap-2"
                 >
@@ -1192,14 +684,14 @@ function App() {
             {/* Header / Timer */}
             <div className="bg-white/90 backdrop-blur-md p-4 rounded-2xl shadow-lg border border-white/50 flex flex-col sm:flex-row justify-between items-center gap-3 relative overflow-hidden">
               {gameStarted && (
-                <div
+                <div 
                   className={`absolute bottom-0 left-0 h-1.5 transition-all duration-1000 ease-linear ${
                     timeLeft < 10 ? 'bg-gradient-to-r from-red-400 to-red-600' : 'bg-gradient-to-r from-green-400 to-blue-500'
                   }`}
                   style={{ width: `${(timeLeft / maxTime) * 100}%` }}
                 />
               )}
-
+              
               <div className="flex items-center gap-3 z-10">
                 <div className={`p-2 rounded-xl ${timeLeft < 10 ? 'bg-red-100 animate-pulse' : 'bg-slate-100'}`}>
                   <Timer className={`w-6 h-6 ${timeLeft < 10 ? 'text-red-500' : 'text-slate-600'}`} />
@@ -1251,7 +743,6 @@ function App() {
                     {gameMode === 'lightning' && '⚡ 闪电'}
                     {gameMode === 'combo' && '🎯 连击'}
                     {gameMode === 'relay' && '🏃 接力'}
-                    {gameMode === 'blind' && '🤪 盲画'}
                   </div>
                 )}
               </div>
@@ -1263,19 +754,9 @@ function App() {
                 ref={canvasRef}
                 width={800}
                 height={600}
-                className="w-full h-full touch-none absolute top-0 left-0"
-              />
-              <canvas
-                ref={previewCanvasRef}
-                width={800}
-                height={600}
-                className="w-full h-full touch-none absolute top-0 left-0 pointer-events-none"
-              />
-              <div
-                ref={stickerDropZoneRef}
-                className={`w-full h-full absolute top-0 left-0 ${
-                  isDrawer
-                    ? (tool === 'bucket' ? 'cursor-cell' : 'cursor-crosshair')
+                className={`w-full h-full touch-none ${
+                  isDrawer 
+                    ? (tool === 'bucket' ? 'cursor-cell' : 'cursor-crosshair') 
                     : (gameMode === 'relay' && relayInfo.isGuessing)
                       ? 'cursor-default pointer-events-none'
                       : 'cursor-default pointer-events-none'
@@ -1288,8 +769,6 @@ function App() {
                 onTouchStart={startDrawing}
                 onTouchMove={draw}
                 onTouchEnd={stopDrawing}
-                onDrop={handleStickerDrop}
-                onDragOver={handleStickerDragOver}
               />
               {!isDrawer && gameStarted && !relayInfo.isGuessing && (
                 <div className="absolute top-3 right-3 bg-black/50 text-white text-xs px-3 py-1.5 rounded-full">
@@ -1301,39 +780,29 @@ function App() {
                   💭 猜词时间！
                 </div>
               )}
-              {gameMode === 'blind' && isDrawer && gameStarted && (
-                <div className="absolute top-3 left-3 bg-indigo-500 text-white text-xs px-3 py-1.5 rounded-full font-bold animate-pulse">
-                  🤪 盲画模式：你看不到自己的画！
-                </div>
-              )}
-              {gameMode === 'blind' && !isDrawer && gameStarted && (
-                <div className="absolute top-3 left-3 bg-pink-500 text-white text-xs px-3 py-1.5 rounded-full font-bold">
-                  👁️ 观察者：正常观看画家创作
-                </div>
-              )}
             </div>
-
+            
             {/* Toolbar */}
             {isDrawer && (
               <div className="bg-white/90 backdrop-blur-md p-3 rounded-2xl shadow-lg border border-white/50 flex flex-wrap items-center gap-3 justify-between">
                 <div className="flex items-center gap-3 overflow-x-auto">
                   {/* Tools */}
                   <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
-                    <button
+                    <button 
                       onClick={() => setTool('pen')}
                       className={`p-2.5 rounded-lg transition ${tool === 'pen' ? 'bg-white shadow text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                       title="画笔"
                     >
                       <Pencil className="w-5 h-5" />
                     </button>
-                    <button
+                    <button 
                       onClick={() => setTool('eraser')}
                       className={`p-2.5 rounded-lg transition ${tool === 'eraser' ? 'bg-white shadow text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                       title="橡皮擦"
                     >
                       <Eraser className="w-5 h-5" />
                     </button>
-                    <button
+                    <button 
                       onClick={() => setTool('bucket')}
                       className={`p-2.5 rounded-lg transition ${tool === 'bucket' ? 'bg-white shadow text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                       title="油漆桶"
@@ -1344,51 +813,6 @@ function App() {
 
                   <div className="w-px h-8 bg-slate-200"></div>
 
-                  {/* Shape Tools */}
-                  <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
-                    <button
-                      onClick={() => setTool('rect')}
-                      className={`p-2.5 rounded-lg transition ${tool === 'rect' ? 'bg-white shadow text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-                      title="矩形"
-                    >
-                      <Square className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => setTool('circle')}
-                      className={`p-2.5 rounded-lg transition ${tool === 'circle' ? 'bg-white shadow text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-                      title="圆形"
-                    >
-                      <Circle className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => setTool('line')}
-                      className={`p-2.5 rounded-lg transition ${tool === 'line' ? 'bg-white shadow text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-                      title="直线"
-                    >
-                      <Minus className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => setTool('arrow')}
-                      className={`p-2.5 rounded-lg transition ${tool === 'arrow' ? 'bg-white shadow text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-                      title="箭头"
-                    >
-                      <ArrowUpRight className="w-5 h-5" />
-                    </button>
-                  </div>
-
-                  <div className="w-px h-8 bg-slate-200"></div>
-
-                  {/* Sticker Button */}
-                  <button
-                    onClick={() => setStickerPanelOpen(!stickerPanelOpen)}
-                    className={`p-2.5 rounded-lg transition ${stickerPanelOpen ? 'bg-white shadow text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-                    title="贴纸"
-                  >
-                    <Sticker className="w-5 h-5" />
-                  </button>
-
-                  <div className="w-px h-8 bg-slate-200"></div>
-
                   {/* Colors */}
                   <div className="flex gap-1.5 items-center">
                     {colors.map(c => (
@@ -1396,8 +820,8 @@ function App() {
                         key={c}
                         onClick={() => { setColor(c); if (tool === 'eraser') setTool('pen'); }}
                         className={`w-7 h-7 rounded-full border-2 transition transform ${
-                          color === c && tool !== 'eraser'
-                            ? 'border-slate-800 scale-110 shadow-md'
+                          color === c && tool !== 'eraser' 
+                            ? 'border-slate-800 scale-110 shadow-md' 
                             : 'border-slate-200 hover:scale-105'
                         }`}
                         style={{ backgroundColor: c }}
@@ -1410,41 +834,21 @@ function App() {
                   {/* Size */}
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-slate-500">粗细</span>
-                    <input
-                      type="range"
-                      min="2" max="24"
-                      value={lineWidth}
+                    <input 
+                      type="range" 
+                      min="2" max="24" 
+                      value={lineWidth} 
                       onChange={(e) => setLineWidth(Number(e.target.value))}
                       className="w-20 accent-slate-600 cursor-pointer"
                     />
-                    <div
+                    <div 
                       className="rounded-full bg-slate-800"
                       style={{ width: lineWidth, height: lineWidth }}
                     ></div>
                   </div>
                 </div>
 
-                {/* Undo/Redo buttons */}
-                <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
-                  <button
-                    onClick={handleUndo}
-                    disabled={historyIndex <= 0}
-                    className={`p-2.5 rounded-lg transition ${historyIndex > 0 ? 'bg-white shadow text-slate-600 hover:text-blue-600' : 'text-slate-300 cursor-not-allowed'}`}
-                    title="撤销 (Ctrl+Z)"
-                  >
-                    <Undo className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={handleRedo}
-                    disabled={historyIndex >= history.length - 1}
-                    className={`p-2.5 rounded-lg transition ${historyIndex < history.length - 1 ? 'bg-white shadow text-slate-600 hover:text-blue-600' : 'text-slate-300 cursor-not-allowed'}`}
-                    title="重做 (Ctrl+Y)"
-                  >
-                    <Redo className="w-5 h-5" />
-                  </button>
-                </div>
-
-                <button
+                <button 
                   onClick={clearCanvas}
                   className="p-2.5 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition flex items-center gap-2 font-semibold"
                 >
@@ -1463,12 +867,12 @@ function App() {
               </h3>
               <span className="text-xs font-medium text-slate-400">房间 {room}</span>
             </div>
-
+            
             <div className="flex-1 p-3 overflow-y-auto space-y-2 bg-slate-50/50">
               {messageList.map((msg, index) => {
                 const isMe = msg.author === username;
                 const isSystem = msg.isSystem;
-
+                
                 if (isSystem) {
                   return (
                     <div key={index} className="flex justify-center my-2">
@@ -1486,8 +890,8 @@ function App() {
                 return (
                   <div key={index} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
                     <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm shadow-sm ${
-                      isMe
-                        ? "bg-blue-600 text-white rounded-br-sm"
+                      isMe 
+                        ? "bg-blue-600 text-white rounded-br-sm" 
                         : "bg-white text-slate-700 border border-slate-100 rounded-bl-sm"
                     }`}>
                       {!isMe && <p className="text-[10px] font-bold mb-0.5 opacity-50">{msg.author}</p>}
@@ -1515,7 +919,7 @@ function App() {
                   onChange={(e) => setCurrentMessage(e.target.value)}
                   onKeyPress={(e) => e.key === "Enter" && sendMessage()}
                 />
-                <button
+                <button 
                   onClick={sendMessage}
                   disabled={isDrawer || !currentMessage.trim() || (gameMode === 'relay' && relayInfo.current > 0 && !relayInfo.isGuessing)}
                   className="bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition shadow-md"
@@ -1525,88 +929,6 @@ function App() {
               </div>
             </div>
           </div>
-
-          {/* Sticker Panel */}
-          {stickerPanelOpen && (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-              <div className="bg-white rounded-3xl p-6 max-w-2xl w-full mx-4 shadow-2xl max-h-[80vh] flex flex-col">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                    <Sticker className="w-6 h-6 text-purple-600" /> 贴纸库
-                  </h2>
-                  <button
-                    onClick={() => setStickerPanelOpen(false)}
-                    className="p-2 hover:bg-slate-100 rounded-lg transition"
-                  >
-                    <X className="w-5 h-5 text-slate-400" />
-                  </button>
-                </div>
-
-                {/* Search */}
-                <div className="mb-4 relative">
-                  <Search className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="搜索贴纸..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
-                  />
-                </div>
-
-                {/* Categories */}
-                <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-                  {Object.keys(STICKER_CATEGORIES).map(category => (
-                    <button
-                      key={category}
-                      onClick={() => setStickerCategory(category)}
-                      className={`px-4 py-2 rounded-xl font-medium text-sm whitespace-nowrap transition ${
-                        stickerCategory === category
-                          ? 'bg-purple-100 text-purple-700'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      {STICKER_CATEGORIES[category].name}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Stickers Grid */}
-                <div className="flex-1 overflow-y-auto">
-                  <div className="grid grid-cols-8 sm:grid-cols-10 gap-2">
-                    {getStickersByCategory(stickerCategory)
-                      .filter(emoji =>
-                        searchQuery === '' ||
-                        emoji.includes(searchQuery)
-                      )
-                      .map((emoji, index) => (
-                        <button
-                          key={index}
-                          draggable
-                          onDragStart={(e) => handleStickerDragStart(e, emoji)}
-                          onClick={() => {
-                            // 快速添加到画布中心
-                            const canvas = canvasRef.current;
-                            if (canvas && isDrawer) {
-                              addSticker(emoji, canvas.width / 2, canvas.height / 2);
-                            }
-                          }}
-                          className="w-10 h-10 text-3xl hover:bg-slate-100 rounded-lg transition flex items-center justify-center cursor-move active:scale-95"
-                          title="拖拽到画布或点击添加"
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                  </div>
-                </div>
-
-                {/* Tips */}
-                <div className="mt-4 p-3 bg-blue-50 rounded-xl text-sm text-blue-700">
-                  💡 提示：拖拽贴纸到画布上放置，或点击直接添加到中心位置
-                </div>
-              </div>
-            </div>
-          )}
 
         </div>
       )}

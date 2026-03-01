@@ -1,0 +1,34 @@
+{
+  "minio": {
+    "endpoint": "api-oss.abp.top",
+    "port": 443,
+    "useSSL": true,
+    "accessKey": "484dACZAebjagWMfT90d",
+    "secretKey": "STVPnLjVbaO5Iju26QW5RS56vmtm1aoaVtkzC19D",
+    "bucket": "wechat",
+    "publicUrl": "https://oss.abp.top"
+  },
+  "wechat": {
+    "appId": "wx128453a2d5ea4c8c",
+    "appSecret": "6ea55d9a6c39f81d948c04eb3c30e4fa"
+  },
+  "themes": {
+    "default": "default",
+    "available": ["default", "dark", "purple", "green", "blue", "orange", "pink", "tech"]
+  },
+  "generator": {
+    "topics": [
+      "技术分享",
+      "行业观察",
+      "产品思考",
+      "生活随笔"
+    ],
+    "defaultTopic": "技术分享",
+    "style": "专业但不枯燥，深入浅出",
+    "length": 1500
+  },
+  "schedule": {
+    "times": ["08:00", "12:00", "18:00"],
+    "timezone": "Asia/Shanghai"
+  }
+}

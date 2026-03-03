@@ -5,7 +5,8 @@ import {
   Pencil, Eraser, Trash2, Send, Play, Users,
   Palette, Timer, Crown, MessageCircle, PaintBucket, RotateCcw,
   RotateCw, Undo, Redo, Square, Circle, Minus, ArrowUpRight,
-  Sticker, X, Search, Star
+  Sticker, X, Search, Star, Trophy, Target, Gift, Bell,
+  Volume2, VolumeX, Moon, Sun, Heart, UserPlus, Settings, BookOpen
 } from 'lucide-react';
 import { STICKER_CATEGORIES, STICKERS, getStickersByCategory, getRecommendedStickers } from './stickers.js';
 
@@ -16,6 +17,96 @@ const socket = io.connect(SOCKET_URL, {
   path: '/socket.io/',
   transports: ['websocket', 'polling']
 });
+
+// ============== 主题配置 ==============
+const THEMES = {
+  default: {
+    name: '默认',
+    icon: '🎨',
+    primary: 'from-blue-600 to-purple-600',
+    bg: 'from-indigo-100 via-purple-50 to-pink-100',
+    card: 'bg-white/90'
+  },
+  dark: {
+    name: '暗黑',
+    icon: '🌙',
+    primary: 'from-gray-700 to-gray-900',
+    bg: 'from-gray-900 via-gray-800 to-gray-900',
+    card: 'bg-gray-800/90',
+    text: 'text-white'
+  },
+  pink: {
+    name: '粉色',
+    icon: '💖',
+    primary: 'from-pink-500 to-rose-500',
+    bg: 'from-pink-100 via-rose-50 to-red-100',
+    card: 'bg-white/90'
+  },
+  ocean: {
+    name: '海洋',
+    icon: '🌊',
+    primary: 'from-cyan-500 to-blue-600',
+    bg: 'from-cyan-100 via-blue-50 to-indigo-100',
+    card: 'bg-white/90'
+  },
+  forest: {
+    name: '森林',
+    icon: '🌲',
+    primary: 'from-green-500 to-emerald-600',
+    bg: 'from-green-100 via-emerald-50 to-teal-100',
+    card: 'bg-white/90'
+  }
+};
+
+// ============== 音效系统 ==============
+const SOUNDS = {
+  correct: { frequency: 800, duration: 0.15, type: 'sine' },
+  wrong: { frequency: 200, duration: 0.3, type: 'square' },
+  tick: { frequency: 600, duration: 0.05, type: 'sine' },
+  achievement: { frequency: [523, 659, 784], duration: 0.2, type: 'sine' },
+  button: { frequency: 440, duration: 0.05, type: 'sine' }
+};
+
+// 播放音效
+const playSound = (soundName, volume = 0.3, enabled = true) => {
+  if (!enabled || typeof window === 'undefined') return;
+  
+  const sound = SOUNDS[soundName];
+  if (!sound) return;
+  
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    if (Array.isArray(sound.frequency)) {
+      // 多音符音效
+      let time = audioContext.currentTime;
+      sound.frequency.forEach((freq, i) => {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.frequency.value = freq;
+        osc.type = sound.type;
+        gain.gain.value = volume;
+        osc.start(time + i * sound.duration);
+        osc.stop(time + (i + 1) * sound.duration);
+      });
+    } else {
+      oscillator.frequency.value = sound.frequency;
+      oscillator.type = sound.type;
+      gainNode.gain.value = volume;
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + sound.duration);
+    }
+  } catch (e) {
+    // 忽略音效错误
+  }
+};
 
 // ============== Flood Fill Algorithm ==============
 function floodFill(ctx, startX, startY, fillColor, canvasWidth, canvasHeight) {
@@ -231,9 +322,10 @@ function App() {
   const [turnInfo, setTurnInfo] = useState({ current: 0, total: 0 });
   const [leaderboard, setLeaderboard] = useState(null);
 
-  // 新增：游戏模式相关状态
+  // 游戏模式相关状态
   const [comboMultiplier, setComboMultiplier] = useState(1);
   const [relayInfo, setRelayInfo] = useState({ current: 0, total: 0, isGuessing: false });
+  const [collaborativeInfo, setCollaborativeInfo] = useState({ drawers: [], isDrawing: false });
 
   // Chat State
   const [currentMessage, setCurrentMessage] = useState("");
@@ -245,15 +337,15 @@ function App() {
   const previewCanvasRef = useRef(null);
   const [color, setColor] = useState("#3b82f6");
   const [lineWidth, setLineWidth] = useState(4);
-  const [tool, setTool] = useState('pen'); // 'pen', 'eraser', 'bucket', 'rect', 'circle', 'arrow', 'line'
+  const [tool, setTool] = useState('pen');
   const isDrawing = useRef(false);
   const lastPos = useRef({ x: 0, y: 0 });
-  const shapeStartPos = useRef({ x: 0, y: 0 }); // 形状起始位置
+  const shapeStartPos = useRef({ x: 0, y: 0 });
 
   // History State (Undo/Redo)
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
-  const maxHistory = 50; // 最多保存50步历史
+  const maxHistory = 50;
 
   // Sticker State
   const [stickerPanelOpen, setStickerPanelOpen] = useState(false);
@@ -263,6 +355,40 @@ function App() {
   const [selectedStickerId, setSelectedStickerId] = useState(null);
   const [draggedSticker, setDraggedSticker] = useState(null);
   const stickerDropZoneRef = useRef(null);
+
+  // ============== Phase 2 & 3: 新功能状态 ==============
+  
+  // 成就系统
+  const [userStats, setUserStats] = useState(null);
+  const [achievements, setAchievements] = useState([]);
+  const [newAchievement, setNewAchievement] = useState(null);
+  const [showAchievementPanel, setShowAchievementPanel] = useState(false);
+  
+  // 每日挑战
+  const [dailyChallenges, setDailyChallenges] = useState([]);
+  const [challengeProgress, setChallengeProgress] = useState({});
+  const [showChallengePanel, setShowChallengePanel] = useState(false);
+  
+  // 主题系统
+  const [currentTheme, setCurrentTheme] = useState('default');
+  const [showThemePanel, setShowThemePanel] = useState(false);
+  
+  // 音效系统
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [volume, setVolume] = useState(0.3);
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+  
+  // 好友系统
+  const [friends, setFriends] = useState([]);
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [showFriendsPanel, setShowFriendsPanel] = useState(false);
+  const [friendSearch, setFriendSearch] = useState('');
+  
+  // 自定义词库
+  const [customWordLists, setCustomWordLists] = useState([]);
+  const [showWordListPanel, setShowWordListPanel] = useState(false);
+  const [newWordListName, setNewWordListName] = useState('');
+  const [newWordListWords, setNewWordListWords] = useState('');
 
   // Auto scroll chat
   useEffect(() => {
@@ -995,6 +1121,66 @@ function App() {
       setPlacedStickers(placedStickers.filter(s => s.id !== data.stickerId));
     });
 
+    // ============== Phase 2 & 3: 新功能事件监听 ==============
+    
+    // 用户统计
+    socket.on("user_stats", (stats) => {
+      setUserStats(stats);
+    });
+    
+    // 成就解锁
+    socket.on("achievement_unlocked", (newAchievements) => {
+      setAchievements(prev => [...prev, ...newAchievements]);
+      if (newAchievements.length > 0) {
+        setNewAchievement(newAchievements[0]);
+        playSound('achievement', volume, soundEnabled);
+        // 3秒后隐藏通知
+        setTimeout(() => setNewAchievement(null), 3000);
+      }
+    });
+    
+    // 成就更新
+    socket.on("achievements_update", (unlockedAchievements) => {
+      setAchievements(unlockedAchievements);
+    });
+    
+    // 每日挑战
+    socket.on("daily_challenges", (data) => {
+      setDailyChallenges(data.challenges);
+      setChallengeProgress(data.progress);
+    });
+    
+    // 合作模式回合
+    socket.on("collaborative_round", (data) => {
+      setGameStarted(true);
+      const isCollaborator = data.drawerIds.includes(socket.id);
+      setIsDrawer(isCollaborator);
+      setTimeLeft(data.roundTime);
+      setMaxTime(data.roundTime);
+      setTurnInfo({ current: data.turnCurrent, total: data.turnTotal });
+      setCollaborativeInfo({ drawers: data.drawerIds, isDrawing: true });
+      setRelayInfo({ current: 0, total: 0, isGuessing: false });
+      
+      if (isCollaborator) {
+        setRoundInfo(`合作绘画中... (共 ${data.drawerIds.length} 位画家)`);
+      } else {
+        setRoundInfo(`观看 ${data.drawers} 合作画画...`);
+      }
+      
+      // 重置画布
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      
+      // 重置历史
+      setHistory([]);
+      setHistoryIndex(-1);
+      setPlacedStickers([]);
+    });
+
     return () => {
       socket.off("receive_message");
       socket.off("draw_data");
@@ -1007,14 +1193,19 @@ function App() {
       socket.off("new_round");
       socket.off("relay_segment");
       socket.off("relay_guessing");
+      socket.off("collaborative_round");
       socket.off("your_turn");
       socket.off("timer_update");
       socket.off("correct_guess");
       socket.off("combo_update");
       socket.off("combo_reset");
       socket.off("game_over");
+      socket.off("user_stats");
+      socket.off("achievement_unlocked");
+      socket.off("achievements_update");
+      socket.off("daily_challenges");
     };
-  }, [triggerWinEffect, gameMode]);
+  }, [triggerWinEffect, gameMode, soundEnabled, volume, placedStickers]);
 
   // Initialize canvas with white background
   useEffect(() => {
@@ -1117,6 +1308,7 @@ function App() {
                 <option value="combo">🎯 连击模式 (连续答对倍数加分)</option>
                 <option value="relay">🏃 接力模式 (多人接力画画)</option>
                 <option value="blind">🤪 盲画模式 (画家看不到自己的画)</option>
+                <option value="collaborative">🤝 合作模式 (多人同时绘画)</option>
               </select>
             </div>
 
@@ -1244,7 +1436,7 @@ function App() {
                 <div className={`px-4 py-2 rounded-xl font-bold text-sm ${
                   isDrawer ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
                 }`}>
-                  {isDrawer ? "🎨 画家" : "🤔 猜题者"}
+                  {isDrawer ? (gameMode === 'collaborative' ? "🎨 合作画家" : "🎨 画家") : "🤔 猜题者"}
                 </div>
                 {gameMode !== 'classic' && (
                   <div className="text-[10px] font-bold text-slate-500 px-2">
@@ -1252,6 +1444,7 @@ function App() {
                     {gameMode === 'combo' && '🎯 连击'}
                     {gameMode === 'relay' && '🏃 接力'}
                     {gameMode === 'blind' && '🤪 盲画'}
+                    {gameMode === 'collaborative' && '🤝 合作'}
                   </div>
                 )}
               </div>
@@ -1311,7 +1504,26 @@ function App() {
                   👁️ 观察者：正常观看画家创作
                 </div>
               )}
+              {gameMode === 'collaborative' && gameStarted && (
+                <div className="absolute top-3 left-3 bg-green-500 text-white text-xs px-3 py-1.5 rounded-full font-bold animate-pulse">
+                  🤝 合作模式：大家一起画！
+                </div>
+              )}
             </div>
+
+            {/* Achievement Unlock Notification */}
+            {newAchievement && (
+              <div className="fixed top-4 right-4 bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-6 py-4 rounded-2xl shadow-2xl z-50 animate-bounce">
+                <div className="flex items-center gap-3">
+                  <span className="text-4xl">{newAchievement.icon}</span>
+                  <div>
+                    <div className="font-bold text-lg">🏆 成就解锁！</div>
+                    <div className="text-sm">{newAchievement.name}</div>
+                    <div className="text-xs opacity-80">{newAchievement.desc}</div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Toolbar */}
             {isDrawer && (
@@ -1605,6 +1817,240 @@ function App() {
                   💡 提示：拖拽贴纸到画布上放置，或点击直接添加到中心位置
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ============== Phase 2 & 3: 新功能面板 ============== */}
+          
+          {/* 成就面板 */}
+          {showAchievementPanel && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+              <div className="bg-white rounded-3xl p-6 max-w-lg w-full mx-4 shadow-2xl max-h-[80vh] flex flex-col">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                    <Trophy className="w-6 h-6 text-yellow-500" /> 成就
+                  </h2>
+                  <button onClick={() => setShowAchievementPanel(false)} className="p-2 hover:bg-slate-100 rounded-lg transition">
+                    <X className="w-5 h-5 text-slate-400" />
+                  </button>
+                </div>
+                
+                {/* 用户统计 */}
+                {userStats && (
+                  <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl">
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <div className="text-2xl font-bold text-blue-600">{userStats.wins || 0}</div>
+                        <div className="text-xs text-slate-500">胜利</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-green-600">{userStats.correctGuesses || 0}</div>
+                        <div className="text-xs text-slate-500">猜对</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-purple-600">{userStats.totalScore || 0}</div>
+                        <div className="text-xs text-slate-500">总分</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* 成就列表 */}
+                <div className="flex-1 overflow-y-auto space-y-2">
+                  {achievements.length === 0 ? (
+                    <div className="text-center text-slate-400 py-8">开始游戏来解锁成就吧！</div>
+                  ) : (
+                    achievements.map((achievement) => (
+                      <div key={achievement.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
+                        <span className="text-3xl">{achievement.icon}</span>
+                        <div>
+                          <div className="font-bold text-slate-700">{achievement.name}</div>
+                          <div className="text-xs text-slate-500">{achievement.desc}</div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* 每日挑战面板 */}
+          {showChallengePanel && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+              <div className="bg-white rounded-3xl p-6 max-w-lg w-full mx-4 shadow-2xl">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                    <Target className="w-6 h-6 text-orange-500" /> 每日挑战
+                  </h2>
+                  <button onClick={() => setShowChallengePanel(false)} className="p-2 hover:bg-slate-100 rounded-lg transition">
+                    <X className="w-5 h-5 text-slate-400" />
+                  </button>
+                </div>
+                
+                <div className="space-y-3">
+                  {dailyChallenges.map((challenge) => {
+                    const progress = challengeProgress[challenge.id] || { current: 0, completed: false, claimed: false };
+                    return (
+                      <div key={challenge.id} className={`p-4 rounded-xl ${progress.completed ? 'bg-green-50 border border-green-200' : 'bg-slate-50'}`}>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="font-bold text-slate-700">{challenge.name}</div>
+                            <div className="text-sm text-slate-500">{challenge.desc}</div>
+                            <div className="text-xs text-orange-600 font-bold mt-1">🎁 {challenge.reward} 分奖励</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-bold text-slate-600">{progress.current}/{challenge.target}</div>
+                            {progress.completed && !progress.claimed && (
+                              <button 
+                                onClick={() => {
+                                  // 领取奖励
+                                  fetch(`${SOCKET_URL}/api/daily-challenges/claim`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ userId: socket.id, challengeId: challenge.id })
+                                  }).then(() => {
+                                    playSound('achievement', volume, soundEnabled);
+                                  });
+                                }}
+                                className="mt-1 px-3 py-1 bg-green-500 text-white text-xs rounded-full hover:bg-green-600 transition"
+                              >
+                                领取
+                              </button>
+                            )}
+                            {progress.claimed && (
+                              <span className="text-green-600 text-xs">✓ 已领取</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-2 h-2 bg-slate-200 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all"
+                            style={{ width: `${Math.min(100, (progress.current / challenge.target) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* 主题面板 */}
+          {showThemePanel && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+              <div className="bg-white rounded-3xl p-6 max-w-md w-full mx-4 shadow-2xl">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                    <Palette className="w-6 h-6 text-purple-500" /> 主题
+                  </h2>
+                  <button onClick={() => setShowThemePanel(false)} className="p-2 hover:bg-slate-100 rounded-lg transition">
+                    <X className="w-5 h-5 text-slate-400" />
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  {Object.entries(THEMES).map(([key, theme]) => (
+                    <button
+                      key={key}
+                      onClick={() => {
+                        setCurrentTheme(key);
+                        playSound('button', volume, soundEnabled);
+                      }}
+                      className={`p-4 rounded-xl border-2 transition ${
+                        currentTheme === key ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="text-3xl mb-2">{theme.icon}</div>
+                      <div className="font-bold text-slate-700">{theme.name}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* 设置面板（音效） */}
+          {showSettingsPanel && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+              <div className="bg-white rounded-3xl p-6 max-w-md w-full mx-4 shadow-2xl">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                    <Settings className="w-6 h-6 text-slate-500" /> 设置
+                  </h2>
+                  <button onClick={() => setShowSettingsPanel(false)} className="p-2 hover:bg-slate-100 rounded-lg transition">
+                    <X className="w-5 h-5 text-slate-400" />
+                  </button>
+                </div>
+                
+                {/* 音效开关 */}
+                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl mb-4">
+                  <div className="flex items-center gap-3">
+                    {soundEnabled ? <Volume2 className="w-5 h-5 text-blue-500" /> : <VolumeX className="w-5 h-5 text-slate-400" />}
+                    <span className="font-medium text-slate-700">音效</span>
+                  </div>
+                  <button
+                    onClick={() => setSoundEnabled(!soundEnabled)}
+                    className={`w-12 h-6 rounded-full transition ${soundEnabled ? 'bg-blue-500' : 'bg-slate-300'}`}
+                  >
+                    <div className={`w-5 h-5 bg-white rounded-full shadow transition transform ${soundEnabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
+                
+                {/* 音量调节 */}
+                {soundEnabled && (
+                  <div className="p-4 bg-slate-50 rounded-xl">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium text-slate-700">音量</span>
+                      <span className="text-sm text-slate-500">{Math.round(volume * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      value={volume}
+                      onChange={(e) => setVolume(parseFloat(e.target.value))}
+                      className="w-full accent-blue-500"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {/* 快捷按钮栏 */}
+          {isJoined && (
+            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 flex gap-2 bg-white/90 backdrop-blur-md p-2 rounded-2xl shadow-xl z-40">
+              <button
+                onClick={() => setShowAchievementPanel(true)}
+                className="p-3 hover:bg-slate-100 rounded-xl transition"
+                title="成就"
+              >
+                <Trophy className="w-5 h-5 text-yellow-500" />
+              </button>
+              <button
+                onClick={() => setShowChallengePanel(true)}
+                className="p-3 hover:bg-slate-100 rounded-xl transition"
+                title="每日挑战"
+              >
+                <Target className="w-5 h-5 text-orange-500" />
+              </button>
+              <button
+                onClick={() => setShowThemePanel(true)}
+                className="p-3 hover:bg-slate-100 rounded-xl transition"
+                title="主题"
+              >
+                <Palette className="w-5 h-5 text-purple-500" />
+              </button>
+              <button
+                onClick={() => setShowSettingsPanel(true)}
+                className="p-3 hover:bg-slate-100 rounded-xl transition"
+                title="设置"
+              >
+                {soundEnabled ? <Volume2 className="w-5 h-5 text-blue-500" /> : <VolumeX className="w-5 h-5 text-slate-400" />}
+              </button>
             </div>
           )}
 
